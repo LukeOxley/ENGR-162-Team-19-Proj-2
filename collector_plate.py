@@ -4,94 +4,188 @@ import matplotlib.pyplot as plt
 
 # 10 and 2.5 micro meters
 
-# constants
-p_particle = 1000 # kg / m^3 
-d_particle = 5.0E-6 # m
-q_particle = 2.0E-17 # C
-c_particles = 1.5E-11 # concentration
-h_particle_init = 1.5E-3 # initial height above plate
+# particle constants
+p_particle_m = [1000, 1500] # kg / m^3 
+d_particle_m = [2.5E-6, 10.0E-6] # m
+q_particle_m = [2.0E-17, 2.0E-17] # C
+c_particles_m = [1.5E-11, 1.5E-11] # concentration
+h_particle_init_m = [1.5E-3, 1.5E-3] # initial height above plate
 v_particle_init = 0
-m_particle = math.pi / 6 * p_particle * math.pow(d_particle, 3)
 
-p_fluid = 1.293 # kg / m^3
-u_fluid = 1.81E-5 #15.0E-6 * p_fluid # Ns / m^2 p*v
+# fluid constants
+p_fluid_m = [1.293,1.293] # kg / m^3
+u_fluid_m = [1.81E-5,1.81E-5] #15.0E-6 * p_fluid # Ns / m^2 p*v
 
-o_plate = 4.0E-6 # q / area c/m^2
-H = 2 * h_particle_init # max height to look at surrounding charges
+# plate constants
+o_plate_m = [4.0E-6, 4.0E-6] # q / area c/m^2
 
+# cotter's settings
+x_terms = [p_particle_m, d_particle_m, q_particle_m, c_particles_m, h_particle_init_m, p_fluid_m, u_fluid_m, o_plate_m]
+x_terms_names = ['p_particle', 'd_particle', 'q_particle', 'c_particles', 'h_particle_init', 'p_fluid', 'u_fluid', 'o_plate']
+
+# general constants
 g = 9.81 # m/s^2
 e0 = 8.854E-12 # F*m^-1
 
 dt = 0.00002
 
-# Gravitational Force (const) (downward)
-f_gravity = - math.pi / 6.0 * p_particle * g * math.pow(d_particle, 3)
+# max height to look at surrounding charges
+def hSurround(h_particle_init):
+    return 2 * h_particle_init
 
-# Buoyant Force (cosnt) (upward)
-f_buoyancy = math.pi / 6.0 * p_fluid * g * math.pow(d_particle, 3)
+def mParticle(p_particle, d_particle):
+    return math.pi / 6 * p_particle * math.pow(d_particle, 3)
 
-# Drag Force (depends on v apparent) (upward)
-def Cd(v_apparent):
-    print(p_fluid * d_particle * math.fabs(v_apparent) / u_fluid)
-    return 24 / (p_fluid * d_particle * math.fabs(v_apparent) / u_fluid)
+# Gravitational Force (const) (downward) --------------------------
+def fGravity(p_particle, d_particle):
+    return - math.pi / 6.0 * p_particle * g * math.pow(d_particle, 3)
 
-def fDrag(v_apparent):
+# Buoyant Force (cosnt) (upward) --------------------------
+def fBuoyancy(p_fluid, d_particle):
+    return math.pi / 6.0 * p_fluid * g * math.pow(d_particle, 3)
+
+# Drag Force (depends on v apparent) (upward) --------------------------
+# def Cd(v_apparent, p_fluid, u_fluid, d_particle):
+#     print(p_fluid * d_particle * math.fabs(v_apparent) / u_fluid)
+#     return 24 / (p_fluid * d_particle * math.fabs(v_apparent) / u_fluid)
+
+def fDrag(v_apparent, u_fluid, d_particle):
     # return 0.5 * p_fluid * Cd(v_apparent) * math.pi * \
     #        math.pow(d_particle, 2) * math.pow(v_apparent, 2)
     return 6.0 * math.pi * u_fluid * d_particle / 2 * v_apparent
 
-# Electric Field Force due to plate (const) (downward)
-f_plate = - q_particle * o_plate / 4.0 / math.pi / e0
+# Electric Field Force due to plate (const) (downward) --------------------------
+def fPlate(q_particle, o_plate):
+    return - q_particle * o_plate / 4.0 / math.pi / e0
 
-# Electric field force due to surrounding charges (depends on height)
-def fSurrCharges(d):
+# Electric field force due to surrounding charges (depends on height) --------------------------
+def fSurrCharges(d, q_particle, c_particles, H):
     return math.pow(q_particle, 2) * c_particles / 2.0 / e0 * (2*d - H)
 
-def totalForce(v, d):
-    print("g: {:.3e} b: {:.3e} d: {:.3e} plate: {:.3e} surr: {:.3e}".format(\
-        f_gravity, f_buoyancy, fDrag(v), f_plate, fSurrCharges(d)))
-    return f_gravity + f_buoyancy + fDrag(v) + f_plate + fSurrCharges(d)
+def totalForce(v, d, p_particle, d_particle, q_particle, c_particles, h_particle_init, 
+                     p_fluid, u_fluid, o_plate):
+     #print("g: {:.3e} b: {:.3e} d: {:.3e} plate: {:.3e} surr: {:.3e}".format(\
+     #    f_gravity, f_buoyancy, fDrag(v), f_plate, fSurrCharges(d)))
+     return fGravity(p_particle, d_particle) + fBuoyancy(p_fluid, d_particle) + \
+            fDrag(v, u_fluid, d_particle) + fPlate(q_particle, o_plate) + \
+            fSurrCharges(d, q_particle, c_particles, hSurround(h_particle_init))
 
 # model will start with initial v and d
 # each time, calculate new v and d based on force calculation
+def estimateTravelTime(p_particle, d_particle, q_particle, c_particles, 
+                       h_particle_init, p_fluid, u_fluid, o_plate):
 
-current_h = h_particle_init
-current_v = v_particle_init
-current_a = totalForce(current_h, current_v) / m_particle
-current_t = 0
+    current_h = h_particle_init
+    current_v = 0
+    current_a = 0
+    current_t = 0
 
-# run model until the current h becomes <= 0 (hits the plate)
-history_h = [current_h]
-history_v = [current_v]
-history_a = [current_a]
-history_t = [current_t]
+    # run model until the current h becomes <= 0 (hits the plate)
 
-while(current_h > 0):
-    current_a = totalForce(current_h, current_v) / m_particle
-    # dv = a*dt
-    current_v += current_a * dt
-    # dh = v*dt
-    current_h += current_v * dt
-    current_t += dt
+    counter = 0
+    max_count = 10000
+    while(current_h > 0 and counter < max_count):
+        current_a = totalForce(current_h, current_v, p_particle, d_particle, 
+                               q_particle, c_particles, h_particle_init, 
+                               p_fluid, u_fluid, o_plate) / mParticle(p_particle, d_particle)
+        # dv = a*dt
+        current_v += current_a * dt
+        # dh = v*dt
+        current_h += current_v * dt
+        current_t += dt
 
-    print("T: {:5.3f} H: {:5.4e} V: {:5.4e} A: {:5.4e}: ".format(current_t, 
-           current_h, current_v, current_a))
+        #print("T: {:5.3f} H: {:5.4e} V: {:5.4e} A: {:5.4e}: ".format(current_t, 
+        #    current_h, current_v, current_a))
 
-    history_h.append(current_h)
-    history_v.append(current_v)
-    history_a.append(current_a)
-    history_t.append(current_t)
-plt.subplot(1, 3, 1)
-plt.plot(history_t, history_h)
-plt.subplot(1, 3, 2)
-plt.plot(history_t, history_v)
-plt.subplot(1, 3, 3)
-plt.plot(history_t, history_a)
-
-plt.show()
+        # history_h.append(current_h)
+        # history_v.append(current_v)
+        # history_a.append(current_a)
+        # history_t.append(current_t)
+        counter += 1
     
+    if(counter >= max_count):
+        print("Counter maxed out!")
+    return current_t
 
+# Cotter's Method Functions
+# note, j is 1 based indexing (that is how Cotter's method is defined)
+def codd(j, y):
+    j = int(j)
+    n = int((len(y) - 2) / 2)
+    return 0.25 * ( (y[2*n+2-1] - y[j+n+1-1]) + (y[j+1-1] - y[1-1]))
+def ceven(j, y):
+    j = int(j)
+    n = int((len(y) - 2) / 2)
+    return 0.25 * ( (y[2*n+2-1] - y[j+n+1-1]) - (y[j+1-1] - y[1-1]))
+def m(j, y):
+    return math.fabs(codd(j, y)) + math.fabs(ceven(j, y))
+def s(j, y):
+    m_list = []
+    for i in range(int((len(y)-2) / 2)):
+        m_list.append(m(i+1, y))
+    sum_m = sum(m_list)
+    return m(j, y) / sum_m
+def isSignificant(j, y):
+    return s(j, y) >= 1.0/len(y)
 
+# x terms contains list of each variable in which min is index 0 and max is index 1
+# remember cotter's method stuff is 1 based indexing
+y_terms = []
+
+# L H L L L H H H 
+# L L H L H L H H < for 3 x's
+# L L L H H H L H
+
+low_terms, high_terms = list(zip(*x_terms))
+low_terms = list(low_terms)
+high_terms = list(high_terms)
+
+# Low Case
+y_terms.append(estimateTravelTime(*low_terms))
+
+# Iterate through with all lows and one high
+for i in range(len(low_terms)):
+    input_list = low_terms.copy()
+    # Make one high
+    input_list[i] = high_terms[i] 
+    y_terms.append(estimateTravelTime(*input_list))
+
+# Iterate through with all highs and one low
+for i in range(len(low_terms)):
+    input_list = high_terms.copy()
+    # Make one high
+    input_list[i] = low_terms[i] 
+    y_terms.append(estimateTravelTime(*input_list))
+
+# High Case
+y_terms.append(estimateTravelTime(*high_terms))
+
+print(y_terms)
+
+term_significance_level = []
+term_is_significant = []
+# Perform Significance Analysis
+for i in range(len(low_terms)):
+    term_significance_level.append(s(i+1, y_terms))
+    term_is_significant.append(isSignificant(i+1, y_terms))
+
+print(term_is_significant)
+
+print("{:16s} {:12s} {:11s}".format("Term", "Level", "Significant"))
+for i in range(len(low_terms)):
+    print("{:<16s} {:<12.3f} {:<11s}".format(x_terms_names[i], term_significance_level[i]*100, str(term_is_significant[i])))
+
+# fig, axes = plt.subplots(nrows=2, ncols=3, sharex='all')
+# axes[0,0].plot(history_t, history_h)
+# axes[0,0].set_title("Height")
+# axes[0,1].plot(history_t, history_v)
+# axes[0,1].set_title("Vel")
+# axes[0,2].plot(history_t, history_a)
+# axes[0,2].set_title("Accel")
+
+# fig.tight_layout()
+
+# plt.show()
 
 
 

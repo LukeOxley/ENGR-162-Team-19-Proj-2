@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 p_particle_m = [1000, 1500] # kg / m^3 
 d_particle_m = [2.5E-6, 10.0E-6] # m
 q_particle_m = [2.0E-17, 2.0E-17] # C
-c_particles_m = [1.5E-11, 1.5E-11] # concentration
-h_particle_init_m = [1.5E-3, 1.5E-3] # initial height above plate
+c_particles_m = [29.7E-9 , 44.9E-9]#[1.5E-11, 1.5E-11] # concentration kg/m^3
+h_particle_init_m = [1.5E-2, 1.5E-2] # initial height above plate
 v_particle_init = 0
 
 # fluid constants
@@ -17,11 +17,11 @@ p_fluid_m = [1.293,1.293] # kg / m^3
 u_fluid_m = [1.81E-5,1.81E-5] #15.0E-6 * p_fluid # Ns / m^2 p*v
 
 # plate constants
-o_plate_m = [4.0E-6, 4.0E-6] # q / area c/m^2
+u_plate_m = [200,2000]#[4.0E-6, 4.0E-6] # now in Volts (potential applied to plate)  # q / area c/m^2
 
 # cotter's settings
-x_terms = [p_particle_m, d_particle_m, q_particle_m, c_particles_m, h_particle_init_m, p_fluid_m, u_fluid_m, o_plate_m]
-x_terms_names = ['p_particle', 'd_particle', 'q_particle', 'c_particles', 'h_particle_init', 'p_fluid', 'u_fluid', 'o_plate']
+x_terms = [p_particle_m, d_particle_m, q_particle_m, c_particles_m, h_particle_init_m, p_fluid_m, u_fluid_m, u_plate_m]
+x_terms_names = ['p_particle', 'd_particle', 'q_particle', 'c_particles', 'h_particle_init', 'p_fluid', 'u_fluid', 'u_plate']
 
 # general constants
 g = 9.81 # m/s^2
@@ -45,35 +45,45 @@ def fBuoyancy(p_fluid, d_particle):
     return math.pi / 6.0 * p_fluid * g * math.pow(d_particle, 3)
 
 # Drag Force (depends on v apparent) (upward) --------------------------
-# def Cd(v_apparent, p_fluid, u_fluid, d_particle):
-#     print(p_fluid * d_particle * math.fabs(v_apparent) / u_fluid)
-#     return 24 / (p_fluid * d_particle * math.fabs(v_apparent) / u_fluid)
+def Cd(v_apparent, d_particle):
+    #print(p_fluid * d_particle * math.fabs(v_apparent) / u_fluid)
+    if(v_apparent != 0):
+        return 24 / (1.39E-5 / v_apparent / d_particle)
+    else:
+        return 0
+    #return 24 / (p_fluid * d_particle * math.fabs(v_apparent) / u_fluid)
 
 def fDrag(v_apparent, u_fluid, d_particle):
-    # return 0.5 * p_fluid * Cd(v_apparent) * math.pi * \
-    #        math.pow(d_particle, 2) * math.pow(v_apparent, 2)
-    return 6.0 * math.pi * u_fluid * d_particle / 2 * v_apparent
+    if(v_apparent != 0):
+        return 0.5 * Cd(math.fabs(v_apparent), d_particle) * 1.293 * 0.25 * math.pi * math.pow(d_particle, 2) * \
+            math.pow(v_apparent, 2)
+    else:
+        return 0
+    #return 6.0 * math.pi * u_fluid * d_particle / 2 * v_apparent
 
 # Electric Field Force due to plate (const) (downward) --------------------------
-def fPlate(q_particle, o_plate):
-    return - q_particle * o_plate / 4.0 / math.pi / e0
+def fPlate(d, q_particle, u_plate):
+    return - q_particle * u_plate / d # E = V / d , F = Eq
+    #return  - q_particle * u_plate / 4.0 / math.pi / e0
 
 # Electric field force due to surrounding charges (depends on height) --------------------------
-def fSurrCharges(d, q_particle, c_particles, H):
-    return math.pow(q_particle, 2) * c_particles / 2.0 / e0 * (2*d - H)
+def fSurrCharges(d, q_particle, p_particle, d_particle, c_particles, H):
+    return math.pow(q_particle, 2) * c_particles / mParticle(p_particle, d_particle) / 2.0 / e0 * (2*d - H)
 
-def totalForce(v, d, p_particle, d_particle, q_particle, c_particles, h_particle_init, 
-                     p_fluid, u_fluid, o_plate):
+def totalForce(d, v, p_particle, d_particle, q_particle, c_particles, h_particle_init, 
+                     p_fluid, u_fluid, u_plate):
      #print("g: {:.3e} b: {:.3e} d: {:.3e} plate: {:.3e} surr: {:.3e}".format(\
-     #    f_gravity, f_buoyancy, fDrag(v), f_plate, fSurrCharges(d)))
-     return fGravity(p_particle, d_particle) + fBuoyancy(p_fluid, d_particle) + \
-            fDrag(v, u_fluid, d_particle) + fPlate(q_particle, o_plate) + \
-            fSurrCharges(d, q_particle, c_particles, hSurround(h_particle_init))
+     #    fGravity(p_particle,d_particle), fBuoyancy(p_fluid,d_particle), fDrag(v,u_fluid,d_particle), \
+     #        fPlate(d, q_particle, u_plate), fSurrCharges(d, q_particle, p_particle, d_particle, c_particles, hSurround(h_particle_init))))
+     #return fGravity(p_particle, d_particle) + fBuoyancy(p_fluid, d_particle) + \
+     return fBuoyancy(p_fluid, d_particle) + \
+            fDrag(v, u_fluid, d_particle) + fPlate(d, q_particle, u_plate) + \
+            fSurrCharges(d, q_particle, p_particle, d_particle, c_particles, hSurround(h_particle_init))
 
 # model will start with initial v and d
 # each time, calculate new v and d based on force calculation
 def estimateTravelTime(p_particle, d_particle, q_particle, c_particles, 
-                       h_particle_init, p_fluid, u_fluid, o_plate):
+                       h_particle_init, p_fluid, u_fluid, u_plate):
 
     current_h = h_particle_init
     current_v = 0
@@ -87,7 +97,7 @@ def estimateTravelTime(p_particle, d_particle, q_particle, c_particles,
     while(current_h > 0 and counter < max_count):
         current_a = totalForce(current_h, current_v, p_particle, d_particle, 
                                q_particle, c_particles, h_particle_init, 
-                               p_fluid, u_fluid, o_plate) / mParticle(p_particle, d_particle)
+                               p_fluid, u_fluid, u_plate) / mParticle(p_particle, d_particle)
         # dv = a*dt
         current_v += current_a * dt
         # dh = v*dt
@@ -105,6 +115,7 @@ def estimateTravelTime(p_particle, d_particle, q_particle, c_particles,
     
     if(counter >= max_count):
         print("Counter maxed out!")
+    print("Run time: {:.6f} End Velocity: {:.6f} End Accel: {:.6f}".format(current_t, current_v, current_a))
     return current_t
 
 # Cotter's Method Functions
@@ -160,7 +171,7 @@ for i in range(len(low_terms)):
 # High Case
 y_terms.append(estimateTravelTime(*high_terms))
 
-print(y_terms)
+#print(y_terms)
 
 term_significance_level = []
 term_is_significant = []
@@ -169,7 +180,7 @@ for i in range(len(low_terms)):
     term_significance_level.append(s(i+1, y_terms))
     term_is_significant.append(isSignificant(i+1, y_terms))
 
-print(term_is_significant)
+#print(term_is_significant)
 
 print("{:16s} {:12s} {:11s}".format("Term", "Level", "Significant"))
 for i in range(len(low_terms)):

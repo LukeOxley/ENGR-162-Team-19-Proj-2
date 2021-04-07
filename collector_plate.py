@@ -2,26 +2,30 @@ import math
 import time
 import matplotlib.pyplot as plt
 
-# 10 and 2.5 micro meters
+#simulator mode, set false for specific scenario (vars at bottom)
+perform_cotters = False
 
 # particle constants
 p_particle_m = [1000, 1500] # kg / m^3 
 d_particle_m = [2.5E-6, 10.0E-6] # m
 q_particle_m = [2.0E-17, 2.0E-17] # C
-c_particles_m = [29.7E-9 , 44.9E-9]#[1.5E-11, 1.5E-11] # concentration kg/m^3
-h_particle_init_m = [1.5E-2, 1.5E-2] # initial height above plate
+c_particles_m = [29.7E-9 , 44.9E-9] # concentration kg/m^3
+h_particle_init_m = [0.1, 0.5]#[1.5E-2, 1.5E-2] # initial height above plate
 v_particle_init = 0
 
 # fluid constants
 p_fluid_m = [1.293,1.293] # kg / m^3
-u_fluid_m = [1.81E-5,1.81E-5] #15.0E-6 * p_fluid # Ns / m^2 p*v
+u_fluid_m = [1.81E-5,1.81E-5] # Ns / m^2 p*v
+v_fluid_m = [0.1, 5] # m/s
 
 # plate constants
-u_plate_m = [200,2000]#[4.0E-6, 4.0E-6] # now in Volts (potential applied to plate)  # q / area c/m^2
+u_plate_m = [200,2000] # Volts (potential applied to plate)
 
 # cotter's settings
-x_terms = [p_particle_m, d_particle_m, q_particle_m, c_particles_m, h_particle_init_m, p_fluid_m, u_fluid_m, u_plate_m]
-x_terms_names = ['p_particle', 'd_particle', 'q_particle', 'c_particles', 'h_particle_init', 'p_fluid', 'u_fluid', 'u_plate']
+x_terms = [p_particle_m, d_particle_m, q_particle_m, c_particles_m, \
+           h_particle_init_m, p_fluid_m, u_fluid_m, u_plate_m, v_fluid_m]
+x_terms_names = ['p_particle', 'd_particle', 'q_particle', 'c_particles', \
+                'h_particle_init', 'p_fluid', 'u_fluid', 'u_plate', 'v_fluid_m']
 
 # general constants
 g = 9.81 # m/s^2
@@ -93,7 +97,7 @@ def estimateTravelTime(p_particle, d_particle, q_particle, c_particles,
     # run model until the current h becomes <= 0 (hits the plate)
 
     counter = 0
-    max_count = 10000
+    max_count = 100000000
     while(current_h > 0 and counter < max_count):
         current_a = totalForce(current_h, current_v, p_particle, d_particle, 
                                q_particle, c_particles, h_particle_init, 
@@ -117,6 +121,13 @@ def estimateTravelTime(p_particle, d_particle, q_particle, c_particles,
         print("Counter maxed out!")
     print("Run time: {:.6f} End Velocity: {:.6f} End Accel: {:.6f}".format(current_t, current_v, current_a))
     return current_t
+
+def estimateMinLength(p_particle, d_particle, q_particle, c_particles, 
+                       h_particle_init, p_fluid, u_fluid, u_plate, v_fluid):
+    t = estimateTravelTime(p_particle, d_particle, q_particle, c_particles, 
+                       h_particle_init, p_fluid, u_fluid, u_plate)
+    #print("Min Length: {:.2f}".format(v_fluid * t))
+    return v_fluid * t
 
 # Cotter's Method Functions
 # note, j is 1 based indexing (that is how Cotter's method is defined)
@@ -146,58 +157,76 @@ y_terms = []
 # L H L L L H H H 
 # L L H L H L H H < for 3 x's
 # L L L H H H L H
+if(perform_cotters):
+    low_terms, high_terms = list(zip(*x_terms))
+    low_terms = list(low_terms)
+    high_terms = list(high_terms)
 
-low_terms, high_terms = list(zip(*x_terms))
-low_terms = list(low_terms)
-high_terms = list(high_terms)
+    # Low Case
+    y_terms.append(estimateMinLength(*low_terms))
 
-# Low Case
-y_terms.append(estimateTravelTime(*low_terms))
+    # Iterate through with all lows and one high
+    for i in range(len(low_terms)):
+        input_list = low_terms.copy()
+        # Make one high
+        input_list[i] = high_terms[i] 
+        y_terms.append(estimateMinLength(*input_list))
 
-# Iterate through with all lows and one high
-for i in range(len(low_terms)):
-    input_list = low_terms.copy()
-    # Make one high
-    input_list[i] = high_terms[i] 
-    y_terms.append(estimateTravelTime(*input_list))
+    # Iterate through with all highs and one low
+    for i in range(len(low_terms)):
+        input_list = high_terms.copy()
+        # Make one high
+        input_list[i] = low_terms[i] 
+        y_terms.append(estimateMinLength(*input_list))
 
-# Iterate through with all highs and one low
-for i in range(len(low_terms)):
-    input_list = high_terms.copy()
-    # Make one high
-    input_list[i] = low_terms[i] 
-    y_terms.append(estimateTravelTime(*input_list))
+    # High Case
+    y_terms.append(estimateMinLength(*high_terms))
 
-# High Case
-y_terms.append(estimateTravelTime(*high_terms))
+    #print(y_terms)
 
-#print(y_terms)
+    term_significance_level = []
+    term_is_significant = []
+    # Perform Significance Analysis
+    for i in range(len(low_terms)):
+        term_significance_level.append(s(i+1, y_terms))
+        term_is_significant.append(isSignificant(i+1, y_terms))
 
-term_significance_level = []
-term_is_significant = []
-# Perform Significance Analysis
-for i in range(len(low_terms)):
-    term_significance_level.append(s(i+1, y_terms))
-    term_is_significant.append(isSignificant(i+1, y_terms))
+    #print(term_is_significant)
 
-#print(term_is_significant)
+    print("Cotter's Method Results")
+    print("{:16s} {:12s} {:11s}".format("Term", "Level", "Significant"))
+    for i in range(len(low_terms)):
+        print("{:<16s} {:<12.3f} {:<11s}".format(x_terms_names[i], term_significance_level[i]*100, str(term_is_significant[i])))
 
-print("{:16s} {:12s} {:11s}".format("Term", "Level", "Significant"))
-for i in range(len(low_terms)):
-    print("{:<16s} {:<12.3f} {:<11s}".format(x_terms_names[i], term_significance_level[i]*100, str(term_is_significant[i])))
+# Individual Scenario Simulation
+else:
+    print("Performing analysis on Specific Scenario")
 
-# fig, axes = plt.subplots(nrows=2, ncols=3, sharex='all')
-# axes[0,0].plot(history_t, history_h)
-# axes[0,0].set_title("Height")
-# axes[0,1].plot(history_t, history_v)
-# axes[0,1].set_title("Vel")
-# axes[0,2].plot(history_t, history_a)
-# axes[0,2].set_title("Accel")
+    p_particle_s = 1000 #1000 # kg / m^3 
+    d_particle_s =  2.5E-6 #[2.5E-6, 10.0E-6] # m
+    q_particle_s = 2.0E-17 # C
+    c_particles_s = 44.9E-9 #[29.7E-9 , 44.9E-9] # concentration kg/m^3
+    h_particle_init_s = 0.35 # initial height above plate
 
-# fig.tight_layout()
+    # fluid constants
+    p_fluid_s = 1.293 # kg / m^3
+    u_fluid_s = 1.81E-5 # Ns / m^2 p*v
 
-# plt.show()
+    v_fluid_s = 2.5 # m/s
 
+    # plate constants
+    u_plate_s = 2000 #[200,2000] # Volts (potential applied to plate)
 
+    scenario_terms = [p_particle_s, d_particle_s, q_particle_s, c_particles_s, \
+            h_particle_init_s, p_fluid_s, u_fluid_s, u_plate_s, v_fluid_s]
 
+    dist = estimateMinLength(*scenario_terms)
+
+    print("\nInput Variables----------")
+    for i in range(len(x_terms_names)):
+        print("{:<16s}: {:<12.3e}".format(x_terms_names[i], scenario_terms[i]))
+    print("\nOutput-------------------")
+    print("minimum distance: {:.2f}".format(dist))
+    
+print("\n")
 

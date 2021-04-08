@@ -206,13 +206,13 @@ else:
     d_particle_s =  2.5E-6 #[2.5E-6, 10.0E-6] # m
     q_particle_s = 2.0E-17 # C
     c_particles_s = 44.9E-9 #[29.7E-9 , 44.9E-9] # concentration kg/m^3
-    h_particle_init_s = 0.35 # initial height above plate
+    h_particle_init_s = 0.4 #0.35 # initial height above plate
 
     # fluid constants
     p_fluid_s = 1.293 # kg / m^3
     u_fluid_s = 1.81E-5 # Ns / m^2 p*v
 
-    v_fluid_s = 2.5 # m/s
+    v_fluid_s = 2 #2.5 # m/s
 
     # plate constants
     u_plate_s = 2000 #[200,2000] # Volts (potential applied to plate)
